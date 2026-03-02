@@ -16,8 +16,9 @@ must also drop that prefix.
 
 ## Prerequisites
 
-- Merge `hart/claudemd-edit-safety` (or whatever branch is active) to
-  main before starting. This plan runs on a fresh branch from main.
+- Start from a clean main branch. If a feature branch is active, merge
+  it first — Step 5 deletes package/ in weft-dev, and doing that on an
+  unrelated branch muddies the PR and risks losing uncommitted work.
 - Quit Claude Code before Step 4 to avoid stale hook state during the
   uninstall → re-bootstrap transition.
 
@@ -123,12 +124,23 @@ weft-dev/package/README.md  →  "Shipped code lives at github.com/hartphoenix/w
 ```
 
 Delete the rest of `package/` (scripts, .claude/, CLAUDE.md, .gitignore,
-background/, learning/). Commit on a dedicated branch (e.g.,
-`hart/extract-package-to-standalone`).
+background/, learning/).
+
+```bash
+cd ~/Documents/GitHub/weft-dev
+git checkout -b hart/extract-package-to-standalone
+# ... delete package/ contents, write pointer README ...
+git add -A package/
+git commit -m "Replace package/ with pointer to hartphoenix/weft"
+```
 
 ---
 
 ## Part 2: Test clone & install (non-destructive)
+
+Run this after Step 3 (repo is pushed) and **before** Step 4 (dev
+environment update). This is a gate — if it fails, do not proceed
+with Steps 4-5.
 
 ### Approach: Fake HOME sandbox
 

@@ -308,7 +308,7 @@ the human relationships that supply what the harness cannot: belonging,
 witnessing, true expertise, valid teacherly authority, and wisdom.
 See `design/design-principles.md` §10.
 
-Full design: `design/teacher-relationship.md`.
+Full design: `design/teacher-role/teacher-relationship.md`.
 
 **Existing implementations:**
 - Structured learner state (current-state.md, goals.md, arcs.md) — the
@@ -322,10 +322,17 @@ Full design: `design/teacher-relationship.md`.
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Teacher-student exchange protocol (GitHub Issues) | Designed | Student shares progress reviews; teacher responds with guidance; harness surfaces responses at session start. See `design/teacher-relationship.md` §Protocol. |
-| Teacher opt-in configuration | Designed | Teacher's GitHub handle + per-user signal repo stored in `learning/relationships.md`. Enables publish/read-back cycle. |
-| Startwork teacher-response check | Designed | Startwork reads teacher comments from GitHub Issues and surfaces guidance in session plan. |
-| Progress-review publish step | Designed | Optional Phase 5: posts progress summary as GitHub Issue with labels and teacher assignment. |
+| Teacher-student exchange protocol | Designed | Per-relationship private repo (teacher-hosted). Student pushes progress summaries; teacher pushes feedback. Supersedes per-user signal repo model. See `design/teacher-role/brainstorm-2026-02-27.md` §8. |
+| Teacher opt-in configuration | Designed | Teacher's GitHub handle + relationship repo stored in `learning/relationships.md`. Enables publish/read-back cycle. |
+| Relationship setup skill | Not started | One-time handshake: create private repo, add collaborator, store config in both harnesses. |
+| Startwork teacher-response check | Designed | Reads teacher feedback from relationship repo. Presents verbatim. Contextualizes against last exchange. |
+| Progress-review publish step | Designed | Phase 5: compose high-fidelity plain-English summary, push to relationship repo. |
+| Feedback loop (student side) | Designed | Harness prompts "did this land?" after receiving teacher feedback. Offers to share response back. |
+| Feedback loop (teacher side) | Designed | Contextualizes incoming summary against last exchange: what you said → what student reported → what happened since. |
+| Schedule: student commitments | Designed | Goal deadlines, practice cadence in relationship repo. Startwork checks against commitments. |
+| Schedule: shared commitments (ICS) | Designed | Teacher-owned meeting calendar. Harness generates .ics files. Changes require teacher consent. |
+| Agent as resolution coach | Not started | Prompts teacher to raise feedback resolution during composition. Never suggests shifting valence. Post-MVP. |
+| Celebrate wins | Not started | Prompt student to post milestones publicly after great sessions. Social media, GitHub, etc. Post-MVP. |
 | Learner profile card (shareable summary) | Not started | Opt-in exportable summary of goals, growth edges, and what kind of help the student seeks. Discovery signal for teachers. |
 | Teacher profile / expertise declaration | Not started | Teacher publishes what they offer: domains, capacity, teaching style. Discovery signal for students. |
 | Discovery board (skillshare/timeshare) | Not started | Forum or registry where learner profiles and teacher profiles are browsable. Students and teachers find latent potential in their network. |
@@ -335,6 +342,8 @@ Full design: `design/teacher-relationship.md`.
 | Role fluidity support | Not started | Same user occupies student and teacher roles in different relationships without separate config. The harness identity is the person, not the role. |
 | Notification layer (Discord webhook) | Not started | Optional ping to Discord when a progress review is posted. Links to the GitHub Issue. Complement, not replacement. |
 | Teacher view of progress-review history | Not started | Curated view of a student's review history for a teacher. Could be a GitHub Issue label filter or a generated summary. |
+| Teaching principles document | Not started | Parallel to design-principles.md. First entries: feedback resolution model, decoupling. Reference for agent behavior and shared teacher-student source of truth. |
+| Feedback resolution model reference | Not started | Standalone reference in `.claude/references/`. Valence × resolution coordinate plane. Informs agent feedback behavior and teacher-student shared understanding. |
 
 ---
 

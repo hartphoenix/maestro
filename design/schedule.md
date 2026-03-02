@@ -14,8 +14,8 @@ design docs; this file tracks execution status.
 | Mon 2/23 | PRD submitted. Group pitch sent. Both repos scaffolded. Coordination layer extraction started. | Done |
 | Tue 2/24 | Personal harness depth: intake + session-review end-to-end compatible, shared scoring rubric, evidence tagging, goals/arcs lifecycle. Install package taking shape. | Done |
 | Wed 2/25 | Install package complete. Solo /startwork built. P10 (teacher relationship) designed: principle, design doc, authority model, protocol. | Done |
-| Thu 2/26 | Teacher-relationship MVP built (publish + read-back + config). Signal repo created. Coordination layer parameterization if time. E2E test run. | Planned |
-| Fri 2/27 | Peer testing doubles as first teacher-student exchange. Iterate on feedback. Demo prep. | Planned |
+| Thu 2/26 | Teacher-relationship MVP built (publish + read-back + config). Signal repo created. Coordination layer parameterization if time. E2E test run. | Partial — signal repo done, package extracted to standalone repo and launched. Teacher-relationship MVP not built. |
+| Fri 2/27 | Peer testing doubles as first teacher-student exchange. Iterate on feedback. Demo prep. | In progress — 3 testers onboarded (going at own pace). Teacher exchange code unbuilt. |
 | Sat 2/28 | Demo. | Planned |
 
 ---
@@ -66,28 +66,41 @@ design docs; this file tracks execution status.
 |------|------|--------|
 | P10 design principle | `design/design-principles.md` §10 | Done |
 | Boundary condition update (directional ceiling) | `design/design-principles.md` §Boundary | Done |
-| Design doc (protocol, authority, scoping, MVP) | `design/teacher-relationship.md` | Done |
-| Consent/authority model (triad, revocable grant) | `design/teacher-relationship.md` §Consent | Done |
-| Relationship scoping (time, not domain) | `design/teacher-relationship.md` §Scoping | Done |
-| Config format (learning/relationships.md) | `design/teacher-relationship.md` §Config | Designed |
+| Design doc (protocol, authority, scoping, MVP) | `design/teacher-role/teacher-relationship.md` | Done |
+| Consent/authority model (triad, revocable grant) | `design/teacher-role/teacher-relationship.md` §Consent | Done |
+| Relationship scoping (time, not domain) | `design/teacher-role/teacher-relationship.md` §Scoping | Done |
+| Config format (learning/relationships.md) | `design/teacher-role/teacher-relationship.md` §Config | Designed |
 | Create per-user signal repo (e.g., rhhart/learning-signals) | — | Done (public) |
-| Label protocol setup on signal repo | `design/teacher-relationship.md` §Labels | Done |
-| Progress-review publish step (Phase 5) | `design/teacher-relationship.md` §MVP | Planned |
-| Startwork teacher-response check | `design/teacher-relationship.md` §MVP | Planned |
+| Label protocol setup on signal repo | `design/teacher-role/teacher-relationship.md` §Labels | Done |
+| Progress-review publish step (Phase 5) | `design/teacher-role/teacher-relationship.md` §MVP | Planned |
+| Startwork teacher-response check | `design/teacher-role/teacher-relationship.md` §MVP | Planned |
 | E2E test with peer as teacher | — | Planned (Friday) |
 
 ### Stretch goals
 
 | Task | Spec | Status |
 |------|------|--------|
-| Installation package | `design/prd.md` §Stretch | Done — bootstrap.sh + uninstall.sh shipped. test-install.ts and data-contracts.md remain planned. |
+| Installation package | `design/prd.md` §Stretch | Done — shipped as standalone repo `hartphoenix/weft`. bootstrap.sh + uninstall.sh shipped. test-install.ts and data-contracts.md remain planned. |
 | Solo compound engineer (weekly review) | `design/harness-features.md` §P6 | Done — built as progress-review, integrated into startwork Phase 5 |
 | Team compound engineering workflow | `coordination/commands/workflows/compound.md` | Extracted |
 | Compounding indicators | `design/harness-features.md` §P6 | Partial — progress-review detects compounding breakdown |
 
+### Package extraction
+
+| Task | Status |
+|------|--------|
+| Extract `package/` to standalone `hartphoenix/weft` repo | Done |
+| Fix all `package/` path prefixes in standalone repo | Done |
+| Push to GitHub, verify clone works | Done |
+| Update Hart's dev environment (uninstall old, bootstrap new) | Done |
+| Replace `weft-dev/package/` with pointer README | Done |
+| Share with 3 opt-in testers + Discord announcement | Done |
+
+Full plan: `design/package-extraction-plan.md`.
+
 ### Install package checklist
 
-What ships in `package/` — everything a new user needs to clone and go.
+What ships in `hartphoenix/weft` — everything a new user needs to clone and go.
 
 | Item | Status |
 |------|--------|
@@ -118,7 +131,7 @@ What ships in `package/` — everything a new user needs to clone and go.
 | `scripts/bootstrap.sh` (install pipeline) | Done — shell script, copies weft section to CLAUDE.md, registers skills/hooks |
 | `scripts/uninstall.sh` (clean removal) | Done — strips weft section, removes settings.json entries |
 | `scripts/test-install.ts` (install verification) | Planned |
-| `package/.claude/references/data-contracts.md` | Planned — YAML schema for current-state.md defined in intake SKILL.md §3d |
+| `.claude/references/data-contracts.md` | Planned — YAML schema for current-state.md defined in intake SKILL.md §3d |
 | End-to-end test: clone → /intake → work → /session-review → signal | Not run |
 
 ### Validation experiments

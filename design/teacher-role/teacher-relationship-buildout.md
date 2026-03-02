@@ -1,8 +1,14 @@
 # Teacher Relationship — Buildout Tracker
 
 **Created:** 2026-02-25 brainstorm session
+**Updated:** 2026-02-27 — major design revisions from brainstorm session
 **Context:** P10 promoted to serving-layer principle. Design doc drafted.
 This file tracks the path from principle to implementation.
+
+> **Note:** The 2026-02-27 brainstorm resolved most open questions and
+> revised several earlier decisions. All decisions have been merged into
+> `teacher-relationship.md`, which is the single source of truth.
+> `brainstorm-2026-02-27.md` is the session record.
 
 ---
 
@@ -17,7 +23,7 @@ order: higher items unblock lower ones.
   emotional (belonging, witnessing) + directional (expertise, teacherly
   authority, wisdom, uncomputable problems). Updated in
   `design/design-principles.md`. Propagated to P10 and
-  `design/teacher-relationship.md`.
+  `design/teacher-role/teacher-relationship.md`.
 
 - [x] **2. P10 as serving-layer principle** — Defined in
   `design/design-principles.md` §10. Registered in
@@ -25,14 +31,14 @@ order: higher items unblock lower ones.
   exchange, discovery, role fluidity.
 
 - [x] **3. Teacher-relationship design doc** — Drafted at
-  `design/teacher-relationship.md`. Covers needs analysis, protocol,
+  `design/teacher-role/teacher-relationship.md`. Covers needs analysis, protocol,
   MVP scope, architecture, privacy model, roadmap.
 
 - [x] **4. Consent and authority model** — Triad: teacher, student,
   domain. Authority is domain-specific, granted at-will, revocable.
   Student can defer or revoke. System does not arbitrate conflicts —
   presents teacher guidance as information, not instruction. Captured
-  in `design/teacher-relationship.md` §Consent and authority.
+  in `design/teacher-role/teacher-relationship.md` §Consent and authority.
 
 - [x] **7. Teacher opt-in configuration** — Lives in
   `learning/relationships.md`. List format supports multiple teachers
@@ -83,16 +89,47 @@ order: higher items unblock lower ones.
 subscription model (teacher subscribes to student's progress stream).
 Domain scope is emergent — teacher comments on what they know,
 ignores what they don't. Ad-hoc sharing is post-MVP, natural
-extension for the discovery layer. See `design/teacher-relationship.md`
+extension for the discovery layer. See `design/teacher-role/teacher-relationship.md`
 §Relationship scoping.
 
-### Open questions (from design doc)
+### Resolved in 2026-02-27 brainstorm
 
-Captured in `design/teacher-relationship.md` §Open questions. Not
-blocking MVP but worth resolving before post-demo work:
+See `brainstorm-2026-02-27.md` for full reasoning.
 
-- Summary granularity: full detail vs. executive summary per
-  relationship (probably configurable)
+- [x] **Summary composition** — High-fidelity, plain English for an
+  intelligent specialist. Teacher's harness handles breakdown.
+- [x] **Read-back integration** — Present teacher comments verbatim.
+  No agent parsing.
+- [x] **Consent granularity** — Binary (share or don't). No
+  domain-level granularity for MVP or near-term.
+- [x] **Signal-teacher variant** — Renamed to `public-signal.md`.
+  Decoupled from teacher relationship entirely.
+- [x] **Teacher access depth** — Deep access to learning state, not
+  privacy-stripped.
+- [x] **Transport architecture** — Per-relationship private repo,
+  teacher-hosted. Replaces per-user signal repo model.
+- [x] **Feedback loop** — Elevated to first-class need. Bidirectional,
+  harness-prompted, contextualized.
+- [x] **Schedule** — Two entity types: student commitments (in repo)
+  and shared commitments (teacher-owned ICS).
+
+### New items from brainstorm
+
+- [ ] **Relationship setup skill** — One-time handshake: create repo,
+  add collaborator, store config in both harnesses.
+- [ ] **Teaching principles document** — Parallel to design-principles.
+  First entries: feedback resolution model, decoupling principle.
+- [ ] **Feedback resolution model reference** — Standalone reference
+  doc. Image + essay as shared source of truth.
+- [ ] **Agent as resolution coach** — Prompt teacher to raise feedback
+  resolution during composition. Post-MVP.
+- [ ] **Celebrate wins feature** — Prompt student to post milestones
+  publicly after great sessions. Post-MVP.
+- [ ] **Calendar/scheduling integration** — ICS generation for shared
+  commitments. Hooks for calendar apps deferred.
+
+### Open questions (remaining)
+
 - Non-responsive teacher handling: timeout, gentle prompt, or let it be
 - Bootcamp integration: does the cohort become a teaching network
   with the instructor as one node among many

@@ -1,8 +1,15 @@
-# Signal: Teacher Variant (Extracted)
+# Public Signal (Structural Snapshot)
 
 Extracted from session-review SKILL.md Phase 4 on 2026-02-24. This
-signal structure is designed for a teacher/coordinator tracking multiple
-learners — score distributions, concept coverage, stale-concept counts.
+signal structure is designed for public/developer consumption — tracking
+multiple learners via score distributions, concept coverage, and
+stale-concept counts.
+
+**Not for teachers.** Teachers get deep access to learning state through
+the per-relationship private repo. This is a privacy-stripped structural
+signal for public dashboards, developer metrics, or coordinator views.
+See `design/teacher-role/teacher-relationship.md` and
+`design/teacher-role/brainstorm-2026-02-27.md` §5 for the distinction.
 
 Preserved here for when the team coordination layer needs per-learner
 tracking. Not currently active in any skill.
@@ -41,6 +48,6 @@ gh issue create \
 
 ## Privacy boundary
 
-What never goes in a signal: concept names, conversation content,
-code, file paths, learning profile data, goals, or background. The
-snapshot is structural metadata only.
+What never goes in a public signal: concept names, conversation
+content, code, file paths, learning profile data, goals, or background.
+The snapshot is structural metadata only.
