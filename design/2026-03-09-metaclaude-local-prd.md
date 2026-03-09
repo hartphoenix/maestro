@@ -3,7 +3,8 @@
 **Status:** Draft — brainstormed 2026-03-09
 **Current state:** Haiku-based MetaClaude is fully implemented and
 deployed (hooks, status line, observability, toggle, hotkey). Phase 3
-(observability) is complete. **Next: Phase 1 (local model swap).**
+(observability) complete + extended with structured session logging and
+inline chat display. **Next: Phase 1 (local model swap).**
 **Scope:** One week, experimentation-heavy, drift expected
 **Success metric:** A local meta-agent that observably improves session
 alignment with long-term goals, principles, and system self-improvement.
@@ -15,9 +16,10 @@ Empirical comparisons between architectures that could be published.
 
 A local metacognitive agent that observes Claude Code sessions and
 makes selective, grounded context injections. Replaces the current
-Haiku-via-API approach with a local model running on Ollama, augmented
-by a local embedding index for retrieval. Two modes: dev (full
-observability) and production (minimal UI).
+Haiku-via-API approach with a local model running via LM Studio's MLX
+backend, augmented by a local embedding index for retrieval. Three
+observation modes (Fast, Deep, Probe) tested empirically. Two display
+modes: dev (full observability) and production (minimal UI).
 
 ## Architecture
 
@@ -36,31 +38,75 @@ observability) and production (minimal UI).
 └──────────────┬──────────────────────┘
                │ reads from
 ┌──────────────┴──────────────────────┐
-│         MetaAgent (local, Ollama)   │
+│         MetaAgent (local, LM Studio)│
+│  MLX backend on Apple Silicon       │
 │  7-8B model (A/B test with smaller) │
-│  Observes transcript + retrieved    │
-│  context. Writes injection or       │
-│  stays silent.                      │
+│  Three observation modes:           │
+│  Fast / Deep / Probe                │
 └──────────────┬──────────────────────┘
                │ queries
 ┌──────────────┴──────────────────────┐
 │         Embedding Index             │
 │  SQLite-vec, bun scripts            │
-│  nomic-embed-text via Ollama        │
+│  nomic-embed-text via LM Studio     │
 │  Indexes: notepad, learning state,  │
 │  codebase, reference docs           │
 └─────────────────────────────────────┘
 ```
 
+### Observation modes
+
+Three modes for the observer pipeline, tested empirically:
+
+**Fast** — Retrieve-then-reason. One inference call.
+```
+transcript → embed transcript → retrieve chunks → inference model observes
+```
+Embedding does the relevance work mechanically (cosine similarity).
+Finds textually similar content. Fast, cheap, but retrieval is dumb.
+Latency: ~1.5s consistent.
+
+**Deep** — Reason-then-retrieve-then-reason. Two inference calls.
+```
+transcript → inference model generates targeted queries
+→ embed queries → retrieve chunks → inference model observes
+```
+First pass is lightweight: "given this transcript, what should I look
+up?" Generates 2-3 query strings grounded in knowledge of the learning
+model, design principles, and learner profile. Second pass reasons over
+pedagogically relevant context, not just topical neighbors.
+Latency: ~3s consistent.
+
+**Probe** — Adaptive. One or two inference calls.
+```
+transcript → embed transcript → retrieve chunks → inference model evaluates:
+  → "sufficient context" → observe/inject (or silence)
+  → "need more" → generate targeted query → retrieve again → observe
+```
+Starts like Fast. If the inference model judges the first retrieval
+insufficient, it generates a targeted query and takes a second pass.
+Most turns stay at one pass. Escalates only when the situation warrants.
+Latency: ~1.5s average, ~3s peak.
+
+The key experimental question: does model-directed retrieval (Deep/Probe)
+surface qualitatively different observations than mechanical retrieval
+(Fast)? Specifically, does the inference model generate queries that
+retrieve pedagogically relevant context (learner patterns, design
+principles, boundary-confusion history) that cosine similarity over raw
+transcript would miss?
+
+Secondary question for Probe: can a 4-8B model reliably judge whether
+its first-pass retrieval is sufficient? If escalation rate is ~0% or
+~100%, Probe collapses to Fast or Deep respectively and the adaptive
+logic adds no value.
+
 ### Flow per turn
 
 1. Builder Claude responds (Stop hook, async)
 2. Observer reads recent transcript
-3. Observer embeds recent context → queries index for relevant files
-4. Observer sends transcript + retrieved context to local model
-5. Local model returns observation (or silence)
-6. If observation: write to staging file + log
-7. Next user prompt → inject hook reads staging file → injects
+3. Observer runs the active observation mode (Fast, Deep, or Probe)
+4. If observation: write to staging file + log
+5. Next user prompt → inject hook reads staging file → injects
 
 ### Latency target
 
@@ -79,26 +125,37 @@ model speed.
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Runtime | Ollama | Already installed, CLI-native, OpenAI-compatible API |
+| Inference runtime | LM Studio (MLX backend) | MLX is 2-5x faster than llama.cpp/Ollama on Apple Silicon (benchmarked ~230 tok/s vs ~40 tok/s on M2 Ultra). Uses unified memory natively via Metal. Models already downloaded in MLX format — MLX safetensors can't be imported into Ollama (GGUF only), so reusing existing models requires LM Studio. |
+| Embedding runtime | LM Studio (same server) | One server = one process managing GPU memory, one health check, one failure point. Embedding is not the bottleneck (~50ms either way). |
 | Model size | 7-8B primary, A/B test 3-4B | Metacognition is complex; needs reasoning capacity. Test empirically. |
-| Embedding model | nomic-embed-text (Ollama) | Already installed, fast, good quality |
+| Embedding model | nomic-embed-text via LM Studio | Fast, good quality, ~270MB — negligible memory. Needed at both index and query time (same embedding space required for cosine similarity). Not a bottleneck (~50ms); not worth optimizing separately. |
 | Vector store | SQLite-vec + bun:sqlite | Single file, observable, no new dependencies |
 | Embedding scope | Generous — notepad, learning, codebase, references | Embedding cost is trivial; breadth improves retrieval |
-| Retrieval design | MetaAgent retrieves, gives Builder Claude file paths + relevant excerpts | MetaAgent has the aerial view; it knows what's relevant |
-| Observability | Log file (must-have), dev-mode display (must-have) | Injection is highest-influence point; needs monitoring |
-| Modes | Dev (full info) vs Production (minimal) | Different needs for builder vs. user |
+| Retrieval design | Three observation modes (Fast/Deep/Probe) | Fast retrieves textually similar content (topical neighbors). Deep/Probe use the inference model to generate queries grounded in learning model knowledge, retrieving pedagogically relevant content (learner patterns, design principles, boundary-confusion history) that cosine similarity over raw transcript would miss. The difference between topical and pedagogical retrieval is the core experimental question. |
+| Scheduling | Script-controlled sequential pipeline | Embed → retrieve → infer. Never concurrent — stages are serial by design, so models never compete for GPU. The observer script is the scheduler. No need for LM Studio model priority config. Both models (~5GB total) fit in 16GB alongside OS and Claude Code. |
+| Optimization target | Latency/turnaround, not download time | Models are downloaded once and kept loaded. The metric that matters is per-turn observer completion time — it determines whether same-turn injection is feasible. |
+| Observability | Log file (must-have), dev-mode inline display (must-have) | Injection is highest-influence point; needs monitoring. Dev mode shows additionalContext inline in chat with ◉ MC heading. |
+| Display modes | Dev (full info) vs Production (minimal) | Different needs for builder vs. user |
 | Toggle | `Cmd+Ctrl+M` global hotkey + mode flag | Out-of-band, doesn't pollute conversation |
+| Session logging | Per-session JSONL in `weft-dev/meta/` | One file per conversation. Captures full pipeline per turn: context window, queries, retrieved chunks, reasoning, decision. Serves both human review and Phase 4 empirical framework. Session identity from transcript UUID; pointer file coordinates observer.sh and inject.sh. |
 | User install | 95% automated / 5% user choices | After personal testing proves the concept |
+| Model selection | Flag-based via toggle.sh (--sl/--ml/--ll/--mch/--mco), abbreviations in status line | Short, scannable. Lowercase flags match shell convention. Abbreviations encode backend class at a glance. |
+| Thinking tag handling | Log full response, strip for injection (two-path) | Thinking chain is valuable data for comparison; Builder Claude should never see meta-agent internals. |
+| Instruction passing | `+[]/−[]` syntax, file-persisted, appended to system prompt | Instructions are session-level directives. `+` appends, `-` replaces, `-[]` clears. File persists until cleared or disabled. |
+| Backend routing | JSON config file (`~/.claude/.metaclaude-model`) with `backend` field | Clean separation: toggle.sh writes once, observer.sh reads and routes. Adding a new backend means one case in each. |
+| Hot-swapping models | Flag-based switching via toggle.sh | Status line updates immediately; next observer invocation uses new model. (Moved from deferred.) |
+| Session log viewer | Phase 3a, built | React SPA in `tools/log-viewer/`. Moved from deferred. |
+| Session log `full_response` | New field on observation entries | Preserves full meta-agent output including thinking tags for empirical comparison. |
 
 ## Decisions deferred
 
 | Decision | Why deferred |
 |---|---|
 | Fine-tuning | Week 2+ goal. Need training data first. High effort, unclear payoff for MVP. |
-| Hot-swapping models | Nice-to-have. Need more model experience first. |
 | `[MetaClaude]` prefix on injections | Uncertain how it affects Builder Claude behavior. Test both. |
-| Dashboard/viewer | Stretch goal. Log file + dev mode may be sufficient. |
 | User-facing install flow | Build for self first, then design the onramp. |
+| Ollama as fallback | LM Studio is primary. Ollama stays installed but not required. Revisit if LM Studio proves unreliable for headless/automated use. |
+| Probe escalation threshold | How does the model decide "need more"? Prompt-engineered for now; may need tuning or a confidence score. |
 
 ---
 
@@ -106,38 +163,52 @@ model speed.
 
 ### Phase 1: Local model swap (Day 1)
 
-Replace Haiku API call with local Ollama model in observer.sh.
+Replace Haiku API call with LM Studio's OpenAI-compatible local API.
 
-- [ ] Test observer.sh calling Ollama API instead of `claude -p`
-- [ ] Try 3 models: one small (Phi-4-mini or Qwen3-4B), one medium
-      (Llama 3.2 8B or Qwen3-8B), one larger if machine permits
-- [ ] Measure per-model: inference time, response quality, memory usage
+- [x] Model selection interface: toggle.sh flags (--sl/--ml/--ll/--mch/--mco)
+- [x] Status line dynamic model tag (SL/ML/LL/MCH/MCO)
+- [x] Backend routing in observer.sh (lmstudio via curl / claude-cli via claude -p)
+- [x] Thinking tag handling (two-path: log full, strip for injection)
+- [x] Session instruction passing (+[]/−[] syntax, appended to system prompt)
+- [x] SKILL.md updated with model + instruction commands
+- [x] SETUP.md updated with model/instruction docs
+- [x] Log-viewer updated: dynamic model in session list, user_message detail
+- [x] Session log: new fields (full_response, user_message, model_name)
+- [x] Test observer.sh calling LM Studio API (verified with --sl, Qwen3-4B-Thinking)
+- [x] Verify LM Studio serves inference endpoint (embedding endpoint tested in Phase 2)
+- [ ] Try 3 models: --sl (Qwen3-4B), --ml (Qwen3-8B), --ll (Gemma-3-12B)
+- [ ] Measure per-model: inference time, response quality, memory, responsiveness
 - [ ] Document results in experiment log
 - [ ] Select primary model for remaining work
+- [ ] Model-specific prompt variants: standard prompt.md was written for Haiku. Local models (especially smaller ones) may need different prompting to produce useful observations. Test each model with the current prompt, then evaluate whether per-model prompt variants or a single revised prompt is the right path.
+- [x] Thinking tag strip: handle truncated (unclosed) tags. Fixed in observer.sh — `<think>.*\z` catches unclosed tags at end of string. Token limit removed (local inference is free); 30s curl timeout is the only cap.
 
-**Curriculum alignment:** Local inference, Ollama API, model
-selection, benchmarking.
+**Curriculum alignment:** Local inference, MLX framework, OpenAI-compatible
+APIs, model selection, benchmarking.
 
 ### Phase 2: Embedding index (Day 1-2)
 
-Build the retrieval layer.
+Build the retrieval layer. Embedding model (nomic-embed-text) served
+by LM Studio alongside the inference model. Both stay loaded — the
+embedding model is ~270MB, negligible alongside the inference model.
 
 - [ ] Install sqlite-vec extension for bun:sqlite
-- [ ] Write `index.ts`: embed files via Ollama nomic-embed-text,
+- [ ] Write `index.ts`: embed files via LM Studio /v1/embeddings,
       store in SQLite
 - [ ] Write `query.ts`: embed query string, cosine similarity
       search, return top-K with snippets
 - [ ] Index notepad/ + learning/ + current project codebase
 - [ ] Test retrieval quality: does it find relevant content?
-- [ ] Wire into observer: embed recent transcript → retrieve →
-      include in model payload
+- [ ] Wire into observer as Fast mode baseline: embed transcript →
+      retrieve → include in model payload
 
 **Curriculum alignment:** Embedding models, vector storage, RAG
 pipeline construction.
 
-### Phase 3: Observability (Day 2-3) — COMPLETE
+### Phase 3: Observability (Day 2-3) — COMPLETE + extended
 
-Built ahead of schedule during design session.
+Built ahead of schedule during design session. Extended with structured
+session logging and inline chat display (2026-03-09).
 
 - [x] Injection log file: daily JSONL with timestamp, content,
       latency, mode. In `~/.claude/metaclaude-logs/`.
@@ -145,23 +216,54 @@ Built ahead of schedule during design session.
       ("injected: ...") and staged content ("staged: ...").
 - [x] Production mode: status line indicator only (`○ MC` / `◉ MC`).
 - [x] Mode switching: `toggle.sh --dev / --prod / mode dev / mode prod`
+- [x] Dev mode inline chat display: additionalContext content shown
+      in chat via stderr with `◉ MC` heading in bright magenta,
+      matching the status line icon. (`inject.sh`)
+- [x] Structured per-session logging: JSONL per conversation in
+      `weft-dev/meta/`, capturing full observation pipeline (see
+      "Session logging" section below). (`observer.sh` + `inject.sh`)
 - [ ] Log viewer: simple script to tail/search the log (not yet built)
+
+### Phase 3a: Session Log Viewer
+
+React SPA + Bun HTTP server for reviewing metaclaude sessions.
+Location: `tools/log-viewer/`
+
+- Session list: sortable table (date, meta agent, turns, embedding queries stub)
+- Project filter: dropdown scans `~/.claude/projects/`
+- Conversation view: merged timeline of Claude Code transcript + metaclaude observations
+- Turn rendering: user/assistant turns, tool use with emoji map, thinking blocks
+- Meta entries: indented, italic, blue-tinted background
+- File path links: clickable, reveals in Finder via `open -R`
+- Slash command highlighting
+- Embedding query display: stubbed pending Phase 2
 
 ### Phase 4: Empirical comparison framework (Day 3-4)
 
 The publishable deliverable. A/B testing infrastructure.
+Three independent variables: model size, observation mode, and
+baseline comparison.
 
 - [ ] Define test scenarios: 5-10 representative session types
       (debugging, building, learning, design, stuck-in-a-loop)
 - [ ] Scoring rubric: alignment with goals, intervention accuracy,
       noise ratio (false injections / total injections),
       latency, user-perceived helpfulness
-- [ ] Run each scenario with: no meta-agent, Haiku meta-agent,
-      local small model, local medium model
-- [ ] Log all results in structured format
-- [ ] Compare: retrieval-augmented vs. transcript-only observation
-- [ ] Compare: MetaAgent retrieves vs. MetaAgent tells Builder
-      Claude where to look
+- [ ] **Model comparison:** Run each scenario with no meta-agent,
+      Haiku meta-agent, local small (4B), local medium (8B)
+- [ ] **Observation mode comparison:** Run each scenario with:
+      - No retrieval (transcript only — baseline)
+      - Fast (mechanical retrieval, one inference call)
+      - Deep (model-directed retrieval, two inference calls)
+      - Probe (adaptive — one or two calls)
+- [ ] **Probe diagnostics:** Log escalation rate per session.
+      What percentage of turns trigger the second pass?
+      Does escalation correlate with session type?
+- [ ] **Qualitative comparison:** Do Deep/Probe surface observations
+      that Fast misses? Specifically: learner pattern references,
+      design principle connections, boundary-confusion detection.
+- [ ] Log all results in structured format (JSONL per session,
+      including mode, model, latency, escalation, injection content)
 - [ ] Write up findings
 
 **Curriculum alignment:** Model evaluation, benchmarking,
@@ -171,10 +273,11 @@ empirical methodology.
 
 Make it work smoothly for daily use.
 
-- [ ] Reliability: handle Ollama not running, model not pulled,
+- [ ] Reliability: handle LM Studio not running, model not loaded,
       index not built (graceful degradation, not crashes)
 - [ ] Re-indexing: PostToolUse hook on Write/Edit re-embeds
       changed files, or periodic cron
+- [ ] Select default observation mode based on empirical findings
 - [ ] Tune the meta-agent prompt based on empirical findings
 - [ ] Tune retrieval: similarity threshold, number of results,
       chunk size
@@ -186,8 +289,8 @@ Make it work smoothly for daily use.
 ## Stretch goals (this week if time allows)
 
 - [ ] Same-turn injection (if local model is fast enough)
-- [ ] Dashboard/viewer for injection history
-- [ ] Hot-swap model command
+- [x] Dashboard/viewer for injection history → built as Phase 3a (tools/log-viewer/)
+- [x] Hot-swap model command → toggle.sh flags (--sl/--ml/--ll/--mch/--mco)
 - [ ] MetaAgent writes to notepad (Level 2 from note 010)
 - [ ] Session-spanning memory: MetaAgent maintains its own
       running summary across turns, persisted to a file,
@@ -228,7 +331,7 @@ Each experiment gets a dated entry:
 | Curriculum topic | How this project covers it |
 |---|---|
 | Open model ecosystem | Evaluating models for meta-agent task |
-| Local inference (Ollama) | Core of the build — local model serving |
+| Local inference (LM Studio / MLX) | Core of the build — local model serving optimized for Apple Silicon |
 | Quantization | Testing quantized variants for speed/quality |
 | Model routing/selection | Choosing right model for metacognitive task |
 | Embedding models | nomic-embed-text for retrieval layer |
@@ -246,6 +349,46 @@ transcription tooling and facilitator approval to substitute. The
 conceptual ground (local inference, model selection, pipelines,
 benchmarking) overlaps almost completely.
 
+## Session logging (built)
+
+Structured per-session logs in `weft-dev/meta/`. Each file covers one
+Claude Code conversation. Format: JSONL with typed entries.
+
+**Storage:** `weft-dev/meta/<date>_<uuid-prefix>.jsonl`
+(e.g., `meta/2026-03-09_0beb743c.jsonl`)
+
+**Session identity:** Derived from transcript path UUID
+(`basename "$TRANSCRIPT_PATH" .jsonl`). A pointer file at
+`~/.claude/.metaclaude-session-log` coordinates between observer.sh
+(writes) and inject.sh (reads) so both append to the same log.
+
+**Entry types:**
+
+| Type | Written by | Content |
+|------|-----------|---------|
+| `session_header` | observer.sh (first turn) | session_id, transcript_path, started_at, observation_mode, model |
+| `observation` | observer.sh (every turn) | turn number, context_window (transcript turns, retrieved chunks, notepad files), pipeline stages with per-stage latency and reasoning, decision (inject/silent), injection_content |
+| `injection` | inject.sh (when delivered) | timestamp, content, delivered:true |
+| `error` | observer.sh (on failure) | stage, error message, latency |
+
+**Pipeline stage shape varies by observation mode:**
+- **Fast:** `embed` → `retrieve` → `inference_1` (purpose: `assess_and_decide`)
+- **Deep:** `embed` → `retrieve` → `inference_1` (`generate_queries`) → `embed_2` → `retrieve_2` → `inference_2` (`final_decision`)
+- **Probe:** Same as Fast, plus conditionally `embed_2`/`retrieve_2`/`inference_2`. `inference_1` includes `escalated: true/false`.
+
+**Migration:** Legacy daily JSONL in `~/.claude/metaclaude-logs/`
+preserved via dual-write. Will be removed once structured logging is
+verified across multiple sessions.
+
+**Phase 4 parsability:** Logs are directly queryable with `jq`:
+```bash
+jq 'select(.type=="observation")' meta/*.jsonl          # all observations
+jq 'select(.type=="observation") | .total_latency_ms' meta/*.jsonl  # latency
+jq 'select(.type=="error")' meta/*.jsonl                # errors
+```
+
+---
+
 ## Observability (built)
 
 Dev/prod mode system implemented in `weft/tools/metaclaude/`:
@@ -254,10 +397,14 @@ Dev/prod mode system implemented in `weft/tools/metaclaude/`:
   Every observation logged with latency. Every injection logged with content.
 - **Dev mode display** (must-have, built): Multi-line status line shows
   injection content ("injected: ...") and staged content ("staged: ...").
+- **Dev mode inline chat** (built): When an injection fires, the
+  additionalContext content is shown inline in the chat via stderr.
+  Heading: `◉ MC` in bright magenta (matching the status line icon).
+  Content in dim magenta. Only in dev mode; prod mode is silent.
 - **Prod mode** (built): Indicator only (`○ MC` / `◉ MC`).
 - **Mode switching** (built): `toggle.sh --dev / --prod / mode dev / mode prod`.
 - **Global hotkey** (built): `Cmd+Ctrl+M` via macOS Quick Action.
-- **Dashboard/viewer**: Stretch goal. Log file + dev mode may suffice.
+- **Dashboard/viewer**: Promoted to Phase 3a (session log viewer). See below.
 - **Expandable injection view** (hotkey to peek): Nice-to-have for prod mode.
 
 ---
@@ -280,12 +427,11 @@ Dev/prod mode system implemented in `weft/tools/metaclaude/`:
 | 13-14B (Phi-4, Qwen2.5-14B) | ~8-9 GB | Tight | May cause memory pressure with other apps running |
 | 32B+ | >16 GB | No | Would require heavy quantization (Q2/Q3) with severe quality loss |
 
-**Recommended test matrix:**
-- Small: Qwen3-4B (strong reasoning for size, Apache 2.0)
-- Medium: Llama 3.2 8B or Qwen3-8B (the primary candidate)
-- Stretch: Phi-4 14B at Q4_K_M (test whether it fits alongside
-  everything else — may need to close other apps)
+**Test matrix (MLX models already downloaded in LM Studio):**
+- Small: Qwen3-4B-Thinking-2507-MLX-4bit (~2.1GB)
+- Medium: Qwen3-8B-MLX-4bit (~4.3GB, primary candidate)
+- Stretch: Gemma 3 12B it-qat-4bit (~7.5GB, test memory pressure)
 
-The embedding model (nomic-embed-text) is ~270MB — negligible.
-Both models can be loaded in Ollama simultaneously if memory allows,
-enabling fast A/B switching without model reload.
+The embedding model (nomic-embed-text, GGUF) is ~139MB in LM Studio
+(or ~270MB via Ollama). Negligible. Both inference and embedding models
+served by LM Studio — one server, one memory budget.
