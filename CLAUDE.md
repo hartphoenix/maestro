@@ -18,7 +18,7 @@ Design docs: `design/`. Research: `research/`. Skills: `.claude/skills/`.
 
 ### Development conventions
 
-- Runtime: `bun`
+- Runtime: `bun`. Use `bun <script>` for absolute paths — `bun run` resolves relative to `package.json` and silently fails on absolute paths.
 - Git: meaningful commit messages, commit working states frequently,
   always commit to a feature branch (not main)
 - File structure: flat until complexity demands nesting
